@@ -371,6 +371,12 @@ From `docs/master/.../30-30___TECH-DEBT...` and the implementation summary:
 - **Index stage is a no-op in live sync** — the orchestrator imports a `DocumentIndexer`
   class that isn't the actual `indexer.index_documents` entry point, so it silently skips.
   Indexing works when invoked directly but isn't wired into the sync run yet.
+- **SSE stream closes on a 30s event gap** — `sync.py`'s `event_generator` yields a
+  single keep-alive on `asyncio.wait_for(..., timeout=30)` then *ends* instead of
+  continuing the drain loop. The crawler's login phase emits no mapped progress events,
+  so a slow live login (>30s) closes the stream and the UI shows "Lost connection to sync
+  stream" instead of the terminal complete event. Fix: loop on keep-alive instead of
+  returning. (Surfaced by the e2e sync lifecycle test.)
 - **Classifier precision** — observed 9 CAS vs ground-truth 8 (one spurious fund) on the
   live corpus.
 - **Stage-naming deviation** — five SSE stages (`discover/download/classify/extract/index`)
