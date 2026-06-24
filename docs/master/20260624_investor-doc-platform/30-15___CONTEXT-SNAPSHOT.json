@@ -1,0 +1,62 @@
+{
+  "orchestration_version": "2.5.0",
+  "timestamp": "2026-06-24T16:45:00Z",
+  "phase": "Phase 2/3 — Implementation + integration wiring",
+  "mode": "new-system",
+  "tier": "complex",
+  "project": "Investor Document Platform",
+  "project_root": "/Users/yaaracohen/Development/altius",
+  "branch": "build/investor-doc-platform",
+  "governance_ref": "docs/master/20260624_investor-doc-platform/30-05___GOVERNANCE.md",
+  "plan_source": "20-00_PLANNING_v2.1.md",
+  "implementation_summary_version": "v1.0",
+  "tasks_done": [
+    "T1.1 infra+config",
+    "T1.2 DB schema (SQLite+Alembic, external_file_id UNIQUE)",
+    "T1.3/T1.4/T1.5 PortalCrawler (login+enumerate+download, live 40/40, idempotent)",
+    "T2.1 pdf parser",
+    "T2.2 classifier",
+    "T2.3 extractor",
+    "T2.4 GET /api/holdings",
+    "T3.1 ChromaDB indexer",
+    "T3.2 POST /api/chat grounded RAG",
+    "T1.6 sync orchestrator (POST /api/sync + /sync/trigger + GET /api/sync/stream, 409 P10, 5-stage SSE)",
+    "files endpoints (GET /api/files, GET /api/files/{id}/download)",
+    "T3.3 frontend scaffold + T3.4 Holdings + T3.5 Chat + T3.6 Files",
+    "frontend wired to real backend (MSW off by default; holdings adapter)"
+  ],
+  "backend_routes_live_verified": [
+    "GET /health 200",
+    "GET /api/holdings (real DB, wrapped)",
+    "GET /api/files (40 real FileRecord)",
+    "GET /api/files/{id}/download (200 pdf / 404)",
+    "POST /api/sync 200 then 409 (single-flight P10)",
+    "GET /api/sync/stream SSE",
+    "POST /api/chat"
+  ],
+  "test_status": {
+    "backend_suite": "140 passed, 4 skipped",
+    "frontend_build": "npm run build exit 0",
+    "regressions": 0
+  },
+  "open_issues": [
+    "No real in-browser e2e (verified via curl, not a running browser)",
+    "Blank PORTAL_*/GEMINI_API_KEY env → live sync/chat error at runtime until provisioned",
+    "Duplicate modules from concurrent sessions (classifier.py vs document_classifier.py; llm/gemini.py vs gemini_client.py; pdf_parser/parser.py vs extractor/pdf.py) — pick canonical, delete rest",
+    "Classifier precision: 9 CAS vs ground-truth 8 (junk file misclassified → spurious 7th fund)",
+    "Sync index stage is a no-op (files_indexed=0) — T3.1 indexer not wired into orchestrator index stage",
+    "Frontend now defaults to needing backend on :8000 (set VITE_DISABLE_MSW=false to fall back to mocks)"
+  ],
+  "next_steps": [
+    "Provision PORTAL_* + GEMINI_API_KEY env",
+    "Wire DocumentIndexer into sync index stage",
+    "Real in-browser e2e (app + backend together)",
+    "Reconcile duplicate modules",
+    "Fix classifier precision (spurious CAS)"
+  ],
+  "git": {
+    "branch": "build/investor-doc-platform",
+    "last_commit": "8543689 Baseline: planning docs + env scaffolding before build",
+    "uncommitted": "backend/, frontend/, alembic.ini (all untracked); .env.example + journal modified; nothing committed since baseline"
+  }
+}
