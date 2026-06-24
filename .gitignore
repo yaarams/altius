@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Downloaded portal files + local data
+data/
+downloads/
+*.sqlite
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
