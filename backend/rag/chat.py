@@ -21,7 +21,10 @@ Design:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,80 @@ def retrieve(
 
 
 # ---------------------------------------------------------------------------
+# Portfolio summary context (aggregate grounding — optional fallback)
+# ---------------------------------------------------------------------------
+
+
+def _portfolio_summary_context(db: "Optional[Session]" = None) -> Optional[str]:
+    """
+    Build a grounded, DB-derived summary of the latest capital-account value per
+    fund (plus the computed portfolio total).
+
+    Aggregate questions ("total value", "which funds") are answered up-front by
+    the deterministic structured path (``backend.rag.portfolio``), so this helper
+    is retained as an optional grounding block / test seam rather than the primary
+    route. It is intentionally NOT injected into the default OOC path: a genuinely
+    out-of-corpus question (e.g. "dividend distributions" with an empty index)
+    must still return an honest out_of_context answer (Property 16).
+
+    Returns None when there are no extracted statements or the DB is unavailable.
+    """
+    from decimal import Decimal
+
+    def _to_decimal(raw: str) -> Optional[Decimal]:
+        try:
+            return Decimal(str(raw).replace("$", "").replace(",", "").strip())
+        except Exception:
+            return None
+
+    try:
+        from backend.api.routers.holdings import (
+            _HOLDINGS_SQL,
+            _format_currency,
+            _format_date,
+        )
+
+        own_session = db is None
+        if own_session:
+            from backend.db.session import get_session_factory
+
+            db = get_session_factory()()
+        try:
+            rows = db.execute(_HOLDINGS_SQL).fetchall()
+        finally:
+            if own_session:
+                db.close()
+    except Exception as exc:  # DB not configured / no tables (e.g. unit tests)
+        logger.debug("_portfolio_summary_context: unavailable (%s)", exc)
+        return None
+
+    if not rows:
+        return None
+
+    lines: list[str] = []
+    total = Decimal(0)
+    have_total = True
+    for row in rows:
+        lines.append(
+            f"- {row.fund_name}: {_format_currency(row.current_value)} "
+            f"(as of {_format_date(row.statement_date)})"
+        )
+        d = _to_decimal(row.current_value)
+        if d is None:
+            have_total = False
+        else:
+            total += d
+
+    summary = (
+        "Portfolio holdings summary (latest capital account statement per fund):\n"
+        + "\n".join(lines)
+    )
+    if have_total:
+        summary += f"\nTotal portfolio value across {len(rows)} fund(s): ${total:,.2f}"
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Answer
 # ---------------------------------------------------------------------------
 
@@ -119,6 +196,7 @@ def answer(
     query: str,
     top_k: int = 5,
     chroma_path: Optional[str] = None,
+    db: "Optional[Session]" = None,
 ) -> dict:
     """
     Retrieve relevant chunks and generate a grounded answer.
@@ -140,6 +218,19 @@ def answer(
     Citations are deduplicated by external_file_id and preserve order of relevance.
     """
     from backend.llm.gemini_client import generate_text, GeminiError
+
+    # Portfolio-aggregate questions ("total value", "how many funds") are answered
+    # deterministically from the Statement table — no vector retrieval, no LLM math.
+    # This is the primary path; it guarantees the chat total matches /api/holdings.
+    from backend.rag.portfolio import classify_query, answer_portfolio
+
+    intent = classify_query(query)
+    if intent is not None:
+        structured = answer_portfolio(query, intent, db=db)
+        if structured is not None:
+            logger.info("answer: served %r via structured portfolio path", query[:80])
+            return structured
+        # No statements extracted yet → fall through to honest RAG/OOC handling.
 
     chunks = retrieve(query, top_k=top_k, chroma_path=chroma_path)
 

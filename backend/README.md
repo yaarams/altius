@@ -50,6 +50,61 @@ Migrations run automatically on startup. To run manually:
 alembic upgrade head
 ```
 
+## Viewing the data (SQLite & ChromaDB)
+
+Both stores live under `data/` (created on first run/sync). Paths are
+configurable: SQLite via `DATABASE_URL`, Chroma via `CHROMA_PATH`.
+
+### Relational DB — SQLite (`data/app.db`)
+
+Holds `files`, `statements`, sync state, etc. Runs in WAL mode, so you'll also
+see `app.db-wal` / `app.db-shm` sidecar files — that's normal.
+
+```bash
+# CLI (sqlite3 ships with macOS)
+sqlite3 data/app.db
+sqlite> .tables                 # list tables
+sqlite> .schema statements      # show a table's schema
+sqlite> .headers on
+sqlite> .mode column
+sqlite> SELECT fund_name, statement_date, current_value FROM statements
+        ORDER BY statement_date DESC;
+sqlite> SELECT file_name, doc_type, classification_confidence FROM files;
+sqlite> .quit
+```
+
+```bash
+# One-off query without the interactive shell
+sqlite3 data/app.db "SELECT COUNT(*) FROM files;"
+```
+
+GUI alternatives: **DB Browser for SQLite** (free), **TablePlus**, or **DBeaver** —
+open the `data/app.db` file directly.
+
+### Vector store — ChromaDB (`data/chroma/`)
+
+Persistent collection **`investor_documents`** (chunk embeddings from Gemini
+`text-embedding-004`). Inspect it through the Chroma client, not by hand:
+
+```bash
+.venv/bin/python - <<'PY'
+import chromadb
+client = chromadb.PersistentClient(path="data/chroma")
+col = client.get_collection("investor_documents")
+print("chunks indexed:", col.count())
+print(col.peek(3))                          # sample a few docs + metadata
+# fetch by metadata, e.g. all chunks for one file:
+# print(col.get(where={"file_id": 1}, include=["documents", "metadatas"]))
+PY
+```
+
+> Chroma stores its own `data/chroma/chroma.sqlite3` internally — treat that as an
+> implementation detail and use the `chromadb` API above rather than opening it
+> directly.
+
+To start fresh, stop the server and delete the stores (they're rebuilt on the next
+sync/index): `rm -rf data/app.db* data/chroma/`.
+
 ## Run
 
 ```bash
