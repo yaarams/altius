@@ -29,3 +29,9 @@ downloads/
 
 # Claude Code worktrees / internals
 .claude/
+.kiro
+.hypnothesis
+# Tooling caches / agent scratch (not project source)
+.playwright-mcp/
+.hypothesis/
+.kiro/
