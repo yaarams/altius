@@ -84,7 +84,7 @@ def post_chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     """
     from backend.rag.chat import answer as rag_answer
 
-    result = rag_answer(req.query)
+    result = rag_answer(req.query, db=db)
 
     id_map = _external_to_db_id_map(
         db, [c["file_id"] for c in result["citations"]]
