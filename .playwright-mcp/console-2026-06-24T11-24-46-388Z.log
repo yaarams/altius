@@ -1,0 +1,26 @@
+[     362ms] [LOG] %c╔═══════════════════════════════════════════╗ color: #DBE8F5; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c║                                           ║ color: #DBE8F5; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c║  ALTIUS BUILD INFORMATION   ║ color:#1f8385; font-size: 16px; font-weight: bold; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c║                                           ║ color: #DBE8F5; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c╠═══════════════════════════════════════════╣ color: #DBE8F5; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c║  Build ID: 2026-06-24-11:20:06            ║ color:#53cbff; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     362ms] [LOG] %c║  Environment: production                  ║ color:#53cbff; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     363ms] [LOG] %c╚═══════════════════════════════════════════╝ color: #DBE8F5; @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     363ms] [LOG]  @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1361
+[     677ms] [LOG] Registration [/custom-worker.1.0.js] succeeded. Scope is https://fo1.altius.finance/ @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[     677ms] [LOG] [Registration finished] @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[     822ms] [WARNING] Object data types is not supported @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[     914ms] [LOG] Registration [/custom-worker.1.0.js] succeeded. Scope is https://fo1.altius.finance/ @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[     914ms] [LOG] [Registration finished] @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[    1234ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://fo1.api.altius.finance/api/v0.0.3/bookmarks:0
+[    1235ms] [WARNING] [bugsnag] unhandledrejection handler received a non-error: "object" @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1300
+[    1238ms] xqt
+[    1250ms] [LOG] [Pusher]: connected to a server @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[    1391ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://fo1.api.altius.finance/api/v0.0.3/user:0
+[    1392ms] [WARNING] [bugsnag] unhandledrejection handler received a non-error: "object" @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1300
+[    1394ms] xqt
+[    1921ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://fo1.api.altius.finance/api/broadcasting/auth:0
+[    1921ms] [LOG] [errorSubscribeEvent]:  {type: AuthError, error: HTTP error! status: 403} @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[    2204ms] [LOG] [private-notifications]: connection succeed @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[    2993ms] [LOG] [Subscribe for Deal 10495] @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
+[    2993ms] [LOG] [Subscribe for deal 10495 emails] @ https://fo1.altius.finance/assets/index-8uTk6u4d.js:1305
