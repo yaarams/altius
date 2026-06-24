@@ -117,7 +117,10 @@ function AssistantBubble({ response }: AssistantBubbleProps) {
         {/* Answer text */}
         <Card className="inline-block max-w-full">
           <CardBody>
-            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+            <p
+              data-testid="assistant-answer"
+              className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap"
+            >
               {response.answer}
             </p>
           </CardBody>
@@ -138,7 +141,7 @@ function AssistantBubble({ response }: AssistantBubbleProps) {
 
 function TypingIndicator() {
   return (
-    <div className="flex gap-3 items-start">
+    <div className="flex gap-3 items-start" data-testid="typing-indicator">
       {/* Avatar */}
       <div className="flex-shrink-0 h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold select-none">
         AI
@@ -299,7 +302,7 @@ export default function ChatPage() {
 
             {/* Error alert */}
             {errorMessage && !isPending && (
-              <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+              <div data-testid="chat-error" className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
                 <span className="text-red-500 mt-0.5 flex-shrink-0">✕</span>
                 <div>
                   <p className="text-sm font-semibold text-red-800">Request failed</p>
