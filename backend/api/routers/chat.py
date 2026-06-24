@@ -12,8 +12,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from backend.db.session import get_db
 
 router = APIRouter()
 
@@ -42,8 +45,37 @@ class ChatResponse(BaseModel):
 # Endpoint
 # ---------------------------------------------------------------------------
 
+def _external_to_db_id_map(db: Session, external_ids: list[str]) -> dict[str, str]:
+    """
+    Map ChromaDB chunk metadata ``external_file_id`` → ``File.id`` (as strings).
+
+    RAG citations carry the portal ``external_file_id`` (the indexer's chunk-id
+    key), but the frontend's download route resolves ``File.id`` (see
+    GET /api/files/{id}/download and FileRecord.file_id = str(File.id)). Without
+    this translation citation links 404. Missing/non-integer ids are skipped and
+    fall back to the original value.
+    """
+    from backend.db.models import File
+
+    int_ids: list[int] = []
+    for ext in external_ids:
+        try:
+            int_ids.append(int(ext))
+        except (TypeError, ValueError):
+            continue
+    if not int_ids:
+        return {}
+
+    rows = (
+        db.query(File.id, File.external_file_id)
+        .filter(File.external_file_id.in_(int_ids))
+        .all()
+    )
+    return {str(ext): str(db_id) for db_id, ext in rows}
+
+
 @router.post("/chat", response_model=ChatResponse, tags=["chat"])
-def post_chat(req: ChatRequest) -> ChatResponse:
+def post_chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     """
     Answer a question grounded in the indexed investor documents.
 
@@ -54,11 +86,17 @@ def post_chat(req: ChatRequest) -> ChatResponse:
 
     result = rag_answer(req.query)
 
+    id_map = _external_to_db_id_map(
+        db, [c["file_id"] for c in result["citations"]]
+    )
+
     return ChatResponse(
         answer=result["answer"],
         citations=[
             Citation(
-                file_id=c["file_id"],
+                # Translate external_file_id → File.id so citation links resolve
+                # against /api/files/{id}/download; fall back to the raw id.
+                file_id=id_map.get(c["file_id"], c["file_id"]),
                 file_name=c["file_name"],
                 period=c.get("period"),
             )

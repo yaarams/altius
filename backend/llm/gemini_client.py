@@ -174,12 +174,12 @@ def _parse_json(text: str) -> dict[str, Any]:
 # Embedding — text-embedding-004 (ADR-003/004, T3.1)
 # ---------------------------------------------------------------------------
 
-EMBED_MODEL = "models/text-embedding-004"
+EMBED_MODEL = "models/gemini-embedding-001"
 
 
 def embed_text(text: str) -> list[float]:
     """
-    Embed a single text string using Gemini text-embedding-004 (768-d).
+    Embed a single text string using Gemini gemini-embedding-001 (3072-d).
 
     This is the ONLY embedding network call in this module.  Monkeypatch this
     function in tests to avoid real API calls.

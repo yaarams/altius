@@ -43,3 +43,12 @@
 - **Stage-naming deviation from plan.** Backend emits 5 stages `discover|download|classify|extract|index` (matches already-built frontend client.ts/types.ts) vs plan v2.1's 4 `Crawling|Classifying|Extracting|Indexing`. Frontend = live consumer → frontend won. Informative superset (discover/download split). Priority: Low (cosmetic; plan doc could be updated to match). 
 - **No live e2e for sync.** test_sync.py mocks crawler/Gemini/indexer (offline, deterministic). Real path (portal crawl → SSE → browser) NOT exercised. Priority: Med — needs one live run before ship.
 - **Index stage is a no-op.** DocumentIndexer (T3.1) not wired into the index stage; orchestrator emits `index: done, files_indexed=0` (ADR-008 non-fatal). Wire real indexer once T3.1 canonical module settled. Priority: Med.
+
+## Holdings currency + response-shape gap (found during holdings-after-sync test)
+5. **Backend holdings hardcodes '$' — no currency column**
+   - Priority: Med-High (violates plan R7 "currency"; frontend FundSnapshot.currency expects real code).
+   - Statement model lacks a currency field; api/routers/holdings._format_currency() always prepends '$'.
+   - Frontend Holdings page + MSW fixtures use per-fund currency (USD/EUR). On real wire-up, EUR funds would render as '$'.
+   - Fix: add currency to Statement (extractor should capture it), select it in holdings query, format per-fund.
+6. **Holdings response shape**
+   - Backend returns {"holdings": [...]}; frontend getHoldings() expects FundSnapshot[] with fields fund_name/as_of_date/currency/total_value/holdings[]. Reconcile shape (adapter or backend change) when swapping MSW→real.

@@ -142,7 +142,7 @@ async def _run_pipeline() -> None:
     Stages:
       1. discover + download  (crawler)
       2. classify + extract   (process_all_pending via asyncio.to_thread)
-      3. index                (DocumentIndexer if available, NON-FATAL)
+      3. index                (index_documents if available, NON-FATAL)
 
     Always releases the single-flight flag in finally.
     """
@@ -232,11 +232,20 @@ async def _run_pipeline() -> None:
 
         indexed = 0
         try:
-            # Try to import and run the indexer. If it doesn't exist, skip.
+            # Wire in the real indexer (index_documents function, ADR-008).
             try:
-                from backend.indexer import DocumentIndexer  # type: ignore[import]
-                indexer = DocumentIndexer()
-                index_result = await asyncio.to_thread(indexer.index_all)
+                from backend.indexer import index_documents  # noqa: PLC0415
+                from backend.db.session import get_session_factory  # noqa: PLC0415
+
+                def _run_index() -> dict:
+                    factory = get_session_factory()
+                    _db = factory()
+                    try:
+                        return index_documents(_db)
+                    finally:
+                        _db.close()
+
+                index_result = await asyncio.to_thread(_run_index)
                 if isinstance(index_result, dict):
                     indexed = index_result.get("indexed", 0)
                 elif isinstance(index_result, int):

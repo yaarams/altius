@@ -270,3 +270,88 @@ User: update logs. Created/refreshed tracking artifacts to current state:
 - 30-00_IMPLEMENTATION-SUMMARY_v1.0.md (NEW) — versioned summary (plan v2.1 → impl v1.0), traceability, test status, known issues.
 - 30-30___TECH-DEBT + journal already current.
 State unchanged; documentation only.
+
+### [2026-06-24 17:10 {02:40}] {ctx:--} Phase 3: Playwright e2e (real browser, FE↔real backend) — COMPLETE
+
+User: "create e2e tests to check the frontend in front of the backend, run with Playwright." Closes the deferred "real browser e2e" tech-debt item from [16:45].
+Decisions (AskUserQuestion): JS `@playwright/test` (not python pytest-playwright); run against "real backend as-is".
+
+Setup: installed `@playwright/test` + chromium into `frontend/`. `frontend/playwright.config.ts` launches BOTH servers via `webServer[]`: uvicorn :8000 (cwd=repo root, reads .env, migrates) + vite :5173 (`VITE_DISABLE_MSW=true`, `BACKEND_URL` env). baseURL :5173, workers=1, suite timeout 90s (live Gemini/crawl budget).
+Wiring fixes (minimal): `main.tsx` gated MSW behind `import.meta.env.VITE_DISABLE_MSW !== 'true'` — NOTE this *completed* the [16:45] `.env.development VITE_DISABLE_MSW=true` wiring, which was a no-op until the gate existed (original main.tsx ignored the var). `vite.config.ts` `/api` proxy → `BACKEND_URL ?? :8000`. `package.json` scripts test:e2e / test:e2e:ui. `.gitignore` += playwright artifacts.
+Specs (one per req area, `frontend/e2e/`): nav (R6.1 shell, all 4 pages), sync (R6 — clicks Run, asserts disable + 5 staged rows; does NOT await crawl), holdings (R7.1/7.2), chat (R8.1/8.2/8.3 — accepts grounded-or-OOC), files (R9.1/9.2/9.5 sort).
+
+STATE-DRIFT: first full run (pre-merge tree) = 4 pass / 5 fail, exposing the 3 known contract gaps — (1) holdings shape {holdings:[…]} vs FundSnapshot[], (2) /api/files + download unmounted, (3) render crash on Holdings/Files unmounts the whole app (no error boundary; nav failed as collateral). MID-WORK the concurrent builder (worktree agent-a201a8aad8e11811b) merged the [16:45] wiring into the tree (holdings adapter in client.ts, files.py mounted main.py:80-81, .env.development). Re-run against merged tree = **9 passed**. So #1 + #2 resolved by that merge.
+
+#3 FIXED here: added `frontend/src/components/ErrorBoundary.tsx`; App.tsx wraps `<Routes>` in `<ErrorBoundary key={pathname}>` (keyed so a crash clears on nav; sidebar/sync-control stay mounted).
+VERIFY (independent): `npm run build` exit 0; frontend e2e **9 passed** (nav restored to all 4 pages); backend `pytest` 140 passed / 4 skipped (@live). README.md (root) created: run project + pytest + Playwright, incl. live-crawl/Gemini caveats.
+Caveat: sync e2e kicks off a LIVE portal crawl (background, not awaited); chat hits live Gemini (or fast OOC since vector store unindexed in this DB).
+
+### [2026-06-24 16:40 {02:10}] {ctx:66%} Phase 3: Re-scan + sync diff-only audit + guard test
+
+Re-scan: concurrent session added api/routers/sync.py (T1.6: POST /sync + /sync/trigger, single-flight asyncio.Lock, discover->download->classify->extract->index, SSE), files.py (T3.6). DUPLICATES reconciled (survivors: document_classifier.py, statement_extractor.py, gemini_client.py; my classifier.py/others consolidated). Suite 140 passed/4 skipped.
+Diff-only audit (read-only Explore): per-stage idempotency CORRECT. Download skips downloaded/extracted, retries failed, upsert no dup rows (P1,2). Classify/Extract: process_all_pending loads only downloaded/failed, skips already-classified + status==extracted. Index: skips file.indexed==1, stable chunk-id {ext_id}_{idx} upsert, sets indexed=1. Orchestration single-flight (P10). "Fully processed" = status=extracted AND classification NOT NULL AND indexed=1.
+GAP: no E2E test proving 2nd /sync = 0 new work (stages tested in isolation only). Fix: add integration guard test.
+Dispatch: Dev Eng D1 (sonnet) -> add re-run-skips-all-work test to test_sync.py.
+
+### [2026-06-24 15:32 {resume}] {ctx:62%} RESUME — tree quiesced; holdings-after-sync test
+
+User: ping/continue + verify holdings page correct after sync + add test.
+Quiescence confirmed: pytest 140 passed/4 skipped stable across runs; none of my agents running. Routers now wired in api/main.py (holdings/sync/chat/files @ /api).
+Dispatching agent HLD-test (sonnet): trace post-sync flow (sync→pipeline extract→Statement→GET /api/holdings latest-per-fund), verify correctness, add integration test (seed/ingest → assert holdings correct incl. newer-statement-supersedes), run it.
+
+### [2026-06-24 15:40 {resume}] {ctx:66%} Holdings-after-sync — VERIFIED + test added
+
+Agent HLD-test (sonnet): SUCCESS. Verdict: holdings-after-sync logic CORRECT — latest-per-fund (MAX(statement_date)→MAX(id) tie-break), idempotent (UNIQUE external_file_id + skip extracted), newer statement supersedes, empty→200 []. 
+Added backend/tests/test_holdings_after_sync.py (13 tests / 5 classes incl. real persist_extraction code path). Suite: 153 passed, 4 skipped (was 140).
+GAP FOUND (orchestrator flag, NOT "by design"): Statement model has NO currency column; holdings _format_currency() hardcodes '$'. CONTRADICTS plan R7 ("currency") + frontend FundSnapshot.currency (fixtures mix USD/EUR). Also response shape {holdings:[...]} vs frontend getHoldings expecting FundSnapshot[] — confirm on wire-up. Logged to tech-debt.
+
+### [2026-06-24 15:53 {resume}] {ctx:70%} Holdings test COMPLETE; sync failure is external/in-flight
+
+Reconfirm caught 1 failed: test_sync.py::TestIndexerNonFatal::test_indexer_raises_still_emits_complete.
+Diagnosis: NOT mine. test_sync.py + api/routers/sync.py mtime within seconds of check (15:52:59→15:53:12, still advancing) → concurrent builder actively re-editing sync feature. That test was authored seconds ago and is failing on its in-flight code (patches backend.indexer DocumentIndexer; complete-event assertion). Left untouched (stand-down posture for contended files holds).
+My deliverable verified green:
+- test_holdings_after_sync.py: 11 passed isolated.
+- Whole suite EXCLUDING in-flight test_sync.py: 140 passed, 4 skipped, 0 fail.
+Holdings-after-sync verdict: logic CORRECT; currency gap flagged (tech-debt #5/#6).
+Status: my task done. One external failing test owned by concurrent sync builder — hand-off, not for me.
+
+### [2026-06-24 16:55 {02:25}] {ctx:70%} Phase 3: Sync diff-only CONFIRMED + guarded
+
+Dev Eng D1 (sonnet): SUCCESS. test_sync.py +3 tests (TestDiffOnlySecondRunDoesZeroWork). No production logic changed.
+VERDICT: diff-only works as-is (assertions passed, no bug). 2nd /sync = 0 new work: downloads=0, extracted=0, indexed=0; File/Statement row counts unchanged; ChromaDB count unchanged. Gemini-call spy = 0 classify calls on run 2 (P5). Failed-file variant: only the failed file retried (diff = failed), no vector growth.
+Orchestrator independent verify: test_sync 16 passed; FULL SUITE 156 passed/4 skipped, 0 regressions.
+Minor wart (LOW tech-debt, NOT a break): report files stay status='downloaded' across runs -> re-enter process_all_pending query each sync; skipped at classify (0 Gemini, 0 writes) but `classified` counter non-zero. Cosmetic/iteration only. Could set a processed flag for reports to fully short-circuit.
+NEAR FEATURE-COMPLETE. Tasks done: T1.1-1.6, T2.1-2.5, T3.1-3.6, dups reconciled. LEFT: real frontend<->backend wiring (pages may still use MSW mocks), live e2e (real portal + real Gemini, never run), 19 Hypothesis properties >=100-examples audit. All working-tree only; nothing committed.
+
+### [2026-06-24 16:30 {02:00}] {ctx:70%} Phase 2: T3.1 indexer RUN + T3.2 chat verified — COMPLETE
+
+User: "make sure indexer runs and ChromaDB works". Agent (sonnet): SUCCESS.
+Indexed: 38/40 (30 reports + 8 CAS; 2 "other" excluded). ChromaDB collection `investor_documents` = 260 chunks. files.indexed=38.
+Idempotent: 2nd run skipped 38, count stable 260/260 (upsert by {file_id}_{chunk_index}).
+Chat (real Gemini, TestClient) 5 sample Qs: a–d grounded w/ real file+period citations; e (dividend policy) → not_found, 0 citations, out_of_context=True (no fabrication). P15 top_k≤20 ✓, P16 citations ✓, P17 fresh-doc retrievable ✓.
+Pipeline wiring FIXED: sync.py imported nonexistent `DocumentIndexer` class → indexing was NOT wired into sync; replaced with index_documents(db). Now /api/sync/trigger runs crawl→classify→extract→INDEX. (closes part of T1.6 gap)
+Full suite: 156 passed, 4 skipped, 0 fail.
+
+DEVIATIONS / FLAGS:
+- ADR-004: `text-embedding-004` returns 404 on this API key tier → substituted `gemini-embedding-001` (3072-d). Plan ADR-004 deviation, works. Note in impl summary.
+- period=None for some fund_zeta/fund_delta citations (filename doesn't match period heuristic) → citation period null for those. Tech-debt (R8.3).
+- Retrieval relevance: Q(a) "valuations Q1 2025" cited Q2 2024 commentary — grounded but period-precision loose. Minor RAG-quality item.
+
+Status: T3.1/T3.2 now ✅. RAG pillar functional e2e.
+Remaining: full live /api/sync from-scratch SSE run; frontend↔real-API e2e (MSW default); orchestration Phases 3-5 + impl summary.
+
+### [2026-06-24 17:35 {03:05}] {ctx:--} Phase 3: Indexer/RAG audit + citation-link bug FIXED
+
+User: "make sure the indexer is correct, ChromaDB full, and RAG works." Audited live state (read-only first, then a real RAG query + Gemini).
+VERDICT:
+- ChromaDB full ✓ — `investor_documents` = 260 chunks; 38/38 indexable files `indexed=1`.
+- Indexer logic correct ✓ — 800/100 chunking, embeddings, idempotent upsert by `{external_file_id}_{i}`, metadata, marks file.indexed.
+- RAG works ✓ — live query returned grounded answer w/ real balances (Fund Alpha $4,945,000 etc.), retrieval dist ~0.29, 5 citations w/ period; OOC honesty path intact.
+
+2 BUGS surfaced:
+1. Sync index stage no-op — sync.py imported nonexistent `DocumentIndexer`/`index_all` → ImportError → silently skipped (R8.7). NOTE: this was FIXED by the concurrent builder mid-audit (now `from backend.indexer import index_documents` run with a `get_session_factory()` session) — see entry [16:30]. Their test_sync.py mock + idempotency section also updated. I only cleaned the stale docstring at sync.py:145 (`DocumentIndexer`→`index_documents`).
+2. Chat citation links 404 (R8.4) — RAG citations carry `external_file_id` (e.g. "22054") but the download route + FileRecord use `File.id` (1–40). FIXED (mine) in `backend/api/routers/chat.py`: added `_external_to_db_id_map(db, external_ids)` + `db: Session = Depends(get_db)`; post_chat now rewrites each citation `external_file_id → str(File.id)`, fallback to raw id if no row. LIVE verify (TestClient): citations now id 7/5/4 → each GET /api/files/{id}/download = 200 application/pdf (were 22054… → 404).
+
+TESTS ADDED (mine): `backend/tests/test_chat_router.py` — 5 tests: map translates known ext→File.id (and asserts the ids really differ), map skips unknown/non-integer, /api/chat citation carries File.id, unknown ext id falls back unchanged, OOC → no citations. All mock RAG/Gemini, in-memory StaticPool DB, zero network.
+VERIFY (independent): new file 5 passed; FULL SUITE 161 passed / 4 skipped (was 156; +5 mine), 0 regressions.
+Caveat: index stage only fires on a real Sync (live crawl); corpus already fully indexed so a re-sync skips re-embed unless force=True (correct idempotency, R8.7 = index NEW docs).
