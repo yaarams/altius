@@ -1,54 +1,38 @@
-# Investor Document Platform — Technical Debt & Future Work
+# Investor Document Platform — Technical Debt & Known Issues
 
-## Deferred Items
-1. **Backend wiring for frontend pages (T3.4/T3.5/T3.6)**
-   - Priority: High
-   - Reason: Frontend-first build (user-approved). Pages run against MSW mocks; real FastAPI endpoints not yet implemented.
-   - Affected endpoints: `GET /api/files` (T3.6 / files-list), `GET /api/holdings` (T3.4 / T2.4), `POST /api/chat` + `GET /api/sync/stream` (T3.5/T3.3 / T3.2), `GET /api/files/{id}/download`.
-   - Proposed: implement backend tasks T1.3–T1.6, T2.x, T3.1–T3.2 + REST endpoints conforming to frontend/src/api/types.ts contract; then swap MSW off in prod build and run live e2e verification.
+Updated 2026-06-24 after full live e2e. App is functionally complete end-to-end (live portal + real Gemini). This supersedes earlier mid-build notes.
 
-2. **Live e2e verification of T3.6 Files page**
-   - Priority: Med
-   - Reason: Property 18 (sort) + Property 19 (low-confidence badge) verified against mock fixtures only, not real classifier output.
-   - Proposed: after `GET /api/files` lands, verify 40 real files render, low-confidence (<0.75) flags match classifier, sort correct on real data.
+## ✅ Resolved since earlier drafts
+- ~~Backend wiring for frontend pages~~ — frontend now runs against the real FastAPI backend; Playwright e2e 16/16 pass.
+- ~~Backend split-brain (pipeline → orphan modules)~~ — reconciled to canonical `classifier/document_classifier.py` + `llm/gemini_client.py`; duplicates deleted.
+- ~~Index stage no-op / T3.1 not wired~~ — `sync.py` now calls `index_documents(db)`; live sync indexes 260 chunks.
+- ~~T3.1 indexer / T3.2 chat not run~~ — indexer ran; ChromaDB populated; chat grounded with citations; OOC honest.
+- ~~Holdings response-shape mismatch~~ — reconciled; holdings e2e 3/3 pass against real data.
 
-## Frontend pages — all built (MSW-mocked, live wiring pending)
-- T3.3 Sync, T3.6 Files, T3.4 Holdings, T3.5 Chat — all implemented; consolidated build exit 0.
-- Outstanding: real /api/* endpoints + live e2e (see item 1).
+## Open — deviations from plan
+1. **Embedding model (ADR-004).** `text-embedding-004` returns 404 on this Gemini key tier → using **`gemini-embedding-001`** (3072-d). Works; update ADR-004 if key stays. Priority: Low.
+2. **Gemini SDK declaration.** Verify `backend/pyproject.toml` declares the SDK the code actually imports (`google-genai` vs `google-generativeai`). If mismatched, a clean `pip install` from pyproject installs the wrong package. Priority: Med — confirm before handoff.
+3. **Classifier fund-whitelist.** Precision fix names the 6 portal funds in the LLM prompt so out-of-portal CAS → `other`. Corpus-specific/brittle for a generic system. Priority: Med.
 
-## Assumptions Made
-- API contract in frontend/src/api/types.ts is authoritative; backend must conform (or contract adapted when backend lands).
-- low_confidence threshold = classification_confidence < 0.75 (per plan R4/Property 19).
+## Open — known issues
+4. **SSE login-phase observability (R6).** No events during portal login; on slow logins the 30s keep-alive can close the stream before terminal `complete` → frontend shows "Lost connection" though backend completes. Fix: heartbeat / "Logging in…" event during login. Priority: Med (UX).
+5. **Currency hardcoded to `$`.** `Statement` has no currency field; holdings formatter always prepends `$`. EUR/other-currency funds would mis-render. Fix: extractor captures currency → holdings formats per-fund. Priority: Med (R7 "consistent currency").
+6. **Null citation `period`.** Some fund_zeta/fund_delta filenames don't match the period heuristic → citation period null (file still correct). Fix: fall back to statement_date / in-doc period. Priority: Low.
+7. **Retrieval period-precision.** Quarter-specific questions sometimes cite an adjacent quarter (grounded + cited, but loose). Consider period-filtered retrieval. Priority: Low.
+8. **Junk→`other` depends on LLM.** CAS text-heuristic removed; no-signal filenames fall to Gemini; if Gemini down → `unclassified` (visible per R4, not silent). Priority: Low.
 
-## Pattern Gaps Identified
-- No SharedKnowledge available on host (Windows path absent) → no team patterns applied; consider seeding frontend table/sort pattern later.
+## Stage-naming note
+- Backend SSE emits 5 stages `discover|download|classify|extract|index` (matches frontend client) vs plan v2.1's 4 `Crawling|Classifying|Extracting|Indexing`. Informative superset; frontend is the live consumer. Cosmetic.
 
-## CRITICAL — Backend split-brain (worktree merge artifact)
-3. **pipeline.py wired to untested orphan code path**
-   - Priority: CRITICAL
-   - `pipeline.py` imports `classifier/document_classifier.py` → `llm/gemini.py` (gemini-2.5-flash) → `extractor/pdf.py`.
-   - The TESTED path is `classifier/classifier.py` → `llm/gemini_client.py` (gemini-2.0-flash) → `pdf_parser/parser.py`.
-   - Effect: 88 passing tests do NOT cover the live pipeline; monkeypatch of gemini_client misses gemini.py → live Gemini calls.
-   - Fix: repoint pipeline.py to classifier.py path; delete orphans `document_classifier.py`, `llm/gemini.py`, `extractor/pdf.py` (port pymupdf fallback from extractor/pdf.py into pdf_parser/parser.py first if wanted).
-4. **pyproject wrong Gemini SDK**
-   - Declares `google-generativeai>=0.7.0`; code uses `from google import genai` (package `google-genai`). `pip install` from pyproject installs wrong SDK. Fix the declaration.
+## Deferred (optional for take-home)
+- Orchestration Phases 4–5 (formal code-review/UX audit, `30-35___LESSONS-LEARNED`).
+- Frontend visual polish (explicitly not graded).
+- Multi-deal: deals-list loop is coded but only exercised on deal 10495.
 
-## Backend remaining tasks (features)
-- T1.6 sync orchestration HTTP: POST /api/sync (asyncio.Lock single-flight→409, Prop 10) + GET /api/sync/stream SSE (Crawling|Classifying|Extracting|Indexing).
-- T3.1 indexer→ChromaDB (text-embedding-004, idempotent upsert, set File.indexed).
-- T3.2 retrieval+chat: POST /api/chat (top_k≤20, citations file+period, OOC honest).
-- GET /api/files (list, confidence) + GET /api/files/{id}/download — needed by T3.6 frontend.
+## Assumptions
+- Single account, deal 10495, 40 PDFs, 6 funds (matches recon). Presigned URLs ~1h; download immediately after enumerate (403 → re-fetch).
 
-## T1.6 Sync Orchestrator (added 2026-06-24 16:15)
-- **Stage-naming deviation from plan.** Backend emits 5 stages `discover|download|classify|extract|index` (matches already-built frontend client.ts/types.ts) vs plan v2.1's 4 `Crawling|Classifying|Extracting|Indexing`. Frontend = live consumer → frontend won. Informative superset (discover/download split). Priority: Low (cosmetic; plan doc could be updated to match). 
-- **No live e2e for sync.** test_sync.py mocks crawler/Gemini/indexer (offline, deterministic). Real path (portal crawl → SSE → browser) NOT exercised. Priority: Med — needs one live run before ship.
-- **Index stage is a no-op.** DocumentIndexer (T3.1) not wired into the index stage; orchestrator emits `index: done, files_indexed=0` (ADR-008 non-fatal). Wire real indexer once T3.1 canonical module settled. Priority: Med.
-
-## Holdings currency + response-shape gap (found during holdings-after-sync test)
-5. **Backend holdings hardcodes '$' — no currency column**
-   - Priority: Med-High (violates plan R7 "currency"; frontend FundSnapshot.currency expects real code).
-   - Statement model lacks a currency field; api/routers/holdings._format_currency() always prepends '$'.
-   - Frontend Holdings page + MSW fixtures use per-fund currency (USD/EUR). On real wire-up, EUR funds would render as '$'.
-   - Fix: add currency to Statement (extractor should capture it), select it in holdings query, format per-fund.
-6. **Holdings response shape**
-   - Backend returns {"holdings": [...]}; frontend getHoldings() expects FundSnapshot[] with fields fund_name/as_of_date/currency/total_value/holdings[]. Reconcile shape (adapter or backend change) when swapping MSW→real.
+## What's solid (verified e2e — live portal + real Gemini)
+- Clean rebuild via `/api/sync`: SSE staged discover→download→classify→extract→index→complete; 40 downloaded / 40 classified (40/40 vs portal ground-truth) / 8 statements / 260 chunks; holdings 6 funds; chat grounded+cited; dividend OOC not_found.
+- Idempotent re-sync (0 new, stable counts); concurrent sync → HTTP 409.
+- Backend tests: 156 passed / 4 skipped. Frontend Playwright e2e: 16/16.

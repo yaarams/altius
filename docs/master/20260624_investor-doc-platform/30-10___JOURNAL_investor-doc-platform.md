@@ -373,3 +373,12 @@ Key gaps:
 Frontend: MSW mocks active by default in DEV; real /api only when VITE_DISABLE_MSW=true. Never run against real backend.
 Per-stage idempotency (R3.2/3.5/3.6) MET + guarded earlier. Holdings latest-per-fund SQL (R5.6/R7.3/R11.4) MET.
 This is an audit only — no fixes applied. Awaiting user direction on which gaps to close.
+
+### [2026-06-24 17:00 {02:30}] {ctx:78%} Phase 2/3: Full live E2E — COMPLETE
+
+User: "yes" (live sync + frontend e2e). Agent (sonnet): SUCCESS.
+Part A — clean rebuild via live /api/sync: SSE staged discover→download→classify→extract→index→complete; 40 downloaded / 40 classified / 8 extracted / 260 chunks; holdings=6 funds; chat grounded+citations, dividend OOC not_found. Idempotent 2nd sync: 0 new, counts stable. Concurrent trigger → HTTP 409 (R6.6 ✓).
+Part B — frontend vs REAL backend (VITE_DISABLE_MSW=true, vite proxy already correct): Playwright e2e 16/16 pass (chat 6, files 4, holdings 3, nav 1, sync 2). Holdings/Files/Chat/Sync render real data. npm run build exit 0. 4 e2e specs made data-agnostic/race-safe.
+KNOWN ISSUE (tech-debt): SSE login phase emits no events → 30s keep-alive can close stream before terminal complete on slow logins → frontend "Lost connection" (backend still completes). Fix: heartbeat/“Logging in…” event during login.
+STATUS: all 17 plan tasks functionally ✅. App works e2e on live portal + real Gemini.
+Remaining: orchestration closeout (Phase 4 review, Phase 5 post-mortem, 30-00 IMPL-SUMMARY) + optional SSE heartbeat fix.

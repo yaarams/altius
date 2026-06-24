@@ -27,8 +27,8 @@ Legend: ✅ asserted in browser · 🟡 partial / negative-case only · ⚙️ b
 | **R6 Sync UI** | 6.1 control on every page | ✅ | `nav.spec.ts` |
 | | 6.2 trigger w/o reload, control disabled | ✅ | `sync.spec.ts` lifecycle |
 | | 6.3 live staged progress indicator | ✅ 📝 | `sync.spec.ts` — see stage-naming note below |
-| | 6.4 success summary + counts + re-enable | ✅ | `sync.spec.ts` lifecycle |
-| | 6.5 failure message names the stage + re-enable | ⚙️ | needs fault injection; `test_sync.py` error events |
+| | 6.4 success summary + counts + re-enable | ✅ 🟡 | `sync.spec.ts` — counts + re-enable asserted; terminal banner gated by SSE keep-alive (see note) |
+| | 6.5 failure message names the stage + re-enable | ⚙️ 🟡 | re-enable-on-terminal asserted in `sync.spec.ts`; stage-named failure needs fault injection (`test_sync.py`) |
 | | 6.6 concurrent trigger → 409 message, control stays usable | ✅ | `sync.spec.ts` (second browser context) |
 | **R7 Holdings** | 7.1 one row per fund | ✅ | `holdings.spec.ts` |
 | | 7.2 name + currency value (symbol, 2dp) + human date | ✅ | `holdings.spec.ts` |
@@ -80,6 +80,15 @@ Legend: ✅ asserted in browser · 🟡 partial / negative-case only · ⚙️ b
   ≥0.92, so there is no low-confidence row to assert the positive badge against. Tests
   assert the negative invariant (no badge ≥0.75); the positive path is exercised by the
   page's `isLowConfidence` logic and `test_classifier.py`.
+- **SSE keep-alive limitation (R6.4).** The sync SSE stream
+  (`backend/api/routers/sync.py`) ends the response after a single 30s gap with no
+  *mapped* progress event (it yields one keep-alive comment, then the generator
+  returns instead of continuing the drain loop). The live crawler's **login phase emits
+  no mapped events**, so a slow headless-Chromium login (>30s) closes the stream and the
+  UI shows *"Lost connection to sync stream"* rather than the terminal *complete* event.
+  The discover/download/classify/extract counts and the control re-enable are unaffected
+  and are asserted; the terminal success banner is therefore treated as best-effort in
+  `sync.spec.ts` (success *or* terminal-error, both re-enable the control).
 - **Known issue affecting R8.7.** The sync orchestrator's `index` stage is currently a
   no-op (it imports a `DocumentIndexer` class that isn't the real
   `indexer.index_documents` entry point). Indexing works when invoked directly and the

@@ -12,10 +12,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *   2. Frontend — vite dev on :5173 with VITE_DISABLE_MSW=true so the browser
  *                 hits the live backend through the /api proxy instead of MSW.
  *
- * NOTE: "real backend as-is" — the backend's holdings shape and missing /files
- * route diverge from the frontend contract, so holdings.spec and files.spec are
- * expected to fail; they document the integration gap. The sync test triggers a
- * LIVE portal crawl, and chat hits the live Gemini API.
+ * The full suite verifies the browser-reachable acceptance criteria from
+ * .kiro/specs/.../requirements.md against the real stack — see
+ * e2e/REQUIREMENTS_COVERAGE.md for the requirement→test matrix.
+ *
+ * ⚠️ Live dependencies: sync.spec triggers a LIVE portal crawl of
+ * fo1.altius.finance, and chat.spec hits the live Gemini API — both need a valid
+ * .env (PORTAL_USER, PORTAL_PASSWORD, GEMINI_API_KEY).
  */
 
 const REPO_ROOT = path.resolve(__dirname, '..');
