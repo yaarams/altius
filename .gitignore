@@ -26,3 +26,6 @@ downloads/
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code worktrees / internals
+.claude/
