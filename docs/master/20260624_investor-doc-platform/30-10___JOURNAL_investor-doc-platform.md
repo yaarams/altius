@@ -355,3 +355,21 @@ VERDICT:
 TESTS ADDED (mine): `backend/tests/test_chat_router.py` — 5 tests: map translates known ext→File.id (and asserts the ids really differ), map skips unknown/non-integer, /api/chat citation carries File.id, unknown ext id falls back unchanged, OOC → no citations. All mock RAG/Gemini, in-memory StaticPool DB, zero network.
 VERIFY (independent): new file 5 passed; FULL SUITE 161 passed / 4 skipped (was 156; +5 mine), 0 regressions.
 Caveat: index stage only fires on a real Sync (live crawl); corpus already fully indexed so a re-sync skips re-embed unless force=True (correct idempotency, R8.7 = index NEW docs).
+
+### [2026-06-24 17:20 {02:50}] {ctx:74%} Phase 4: Requirements compliance audit (.kiro requirements.md)
+
+Read-only auditor (sonnet) graded impl vs 12 reqs / ~70 criteria. Suite 156 passed.
+VERDICT: NOT all met. ~3/12 fully MET, 7 PARTIAL, 1 DEVIATION, ALL 12 UNVERIFIED-LIVE (real portal/Gemini/frontend-backend never run; every test mocks).
+Key gaps:
+- R3.1/R11.3 DEVIATION: dedup keyed on external_file_id (ADR-007), NOT (portal_url,file_name); no such unique constraint exists. Literal req unmet (documented deviation).
+- R8.2 NOT MET: no 60s chat timeout (client.ts no AbortSignal).
+- R7.5 NOT MET: Holdings no auto-refresh after sync (pages decoupled, no shared state).
+- R10.3 NOT MET: no round-trip extraction-fidelity test.
+- R4.4/R4.7 PARTIAL: sync summary omits low_confidence count + per-file label/conf + failure reasons.
+- R6.1 PARTIAL: sync control only on SyncPage, not every page. R6.3: SSE stages discover/download/classify/extract/index != literal "Crawling/Classifying/Extracting/Indexing".
+- R2.3/R9.2 PARTIAL: deal_name never stored (only deal_id) -> Files page can't show source deal name.
+- R12.3 PARTIAL: DATABASE_URL/CHROMA_PATH not in required-vars validation.
+- R8.9 PARTIAL: Chroma unavailable -> 500 not structured 503.
+Frontend: MSW mocks active by default in DEV; real /api only when VITE_DISABLE_MSW=true. Never run against real backend.
+Per-stage idempotency (R3.2/3.5/3.6) MET + guarded earlier. Holdings latest-per-fund SQL (R5.6/R7.3/R11.4) MET.
+This is an audit only — no fixes applied. Awaiting user direction on which gaps to close.

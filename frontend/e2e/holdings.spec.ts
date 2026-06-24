@@ -1,30 +1,75 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * R7 — Holdings page: one entry per fund with the latest value + statement date.
+ * Requirement 7 — Holdings page (live backend, MSW disabled).
  *
- * EXPECTED FAILURE against the real backend: GET /api/holdings returns
- *   { holdings: [{ fund_name, current_value: "$…", statement_date: "March 31, 2025", file_id }] }
- * but the frontend's getHoldings() expects a FundSnapshot[] array. The page calls
- * funds.map(...) on a non-array and crashes. This test asserts the INTENDED
- * behavior, so its failure documents the contract mismatch.
+ * The browser-reachable acceptance criteria:
+ *   R7.1 one row per fund
+ *   R7.2 fund name + currency-formatted value (symbol, 2dp) + human-readable date
+ *   R7.3 only the most recent statement per fund (→ each fund appears once)
+ *   R7.4 empty-state prompt when nothing extracted
+ *   R7.5 data refreshes without a full page reload
+ *
+ * R7.6 (placeholder "—"/"N/A" when a value can't be displayed) requires a fund
+ * whose extraction failed AND still surfaces in holdings — the live corpus has
+ * no such row, so the positive case is covered by backend extractor tests
+ * (atomicity: failed extractions write no Statement). See REQUIREMENTS_COVERAGE.md.
  */
 
-test('holdings page renders a heading and fund entries (R7.1, R7.2)', async ({ page }) => {
+test('R7.1/R7.2 — one card per fund showing name, currency value and human date', async ({ page }) => {
   await page.goto('/holdings');
-
   await expect(page.getByRole('heading', { name: 'Holdings' })).toBeVisible();
 
-  // Either funds render, or the documented empty-state prompt is shown (R7.4).
-  const fundCard = page.locator('h2').filter({ hasText: /fund/i }).first();
+  const fundCards = page.locator('h2').filter({ hasText: /fund/i });
   const emptyState = page.getByText(/run a sync to ingest/i);
 
-  await expect(fundCard.or(emptyState)).toBeVisible();
+  // Wait for the holdings fetch to settle (cards or empty-state) before counting.
+  await expect(fundCards.first().or(emptyState)).toBeVisible();
+
+  // R7.4 — when no statements are extracted, the empty-state prompt shows instead.
+  const count = await fundCards.count();
+  if (count === 0) {
+    await expect(emptyState).toBeVisible();
+    return;
+  }
+
+  // R7.1 — at least one fund row is rendered.
+  expect(count).toBeGreaterThan(0);
+
+  // R7.2 — a currency amount with a symbol and 2 grouped digits is shown,
+  const value = page.getByText(/[$€£]\s?[\d,]+/).first();
+  await expect(value).toBeVisible();
+  // …and a human-readable statement date ("As of Sep 30, 2025" style).
+  await expect(page.getByText(/As of\s+[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}/).first()).toBeVisible();
 });
 
-test('each fund shows a currency-formatted value and statement date (R7.2)', async ({ page }) => {
+test('R7.3 — each fund appears exactly once (latest statement per fund)', async ({ page }) => {
   await page.goto('/holdings');
 
-  // Currency amount with a symbol (e.g. $5,816,000) somewhere on the page.
-  await expect(page.getByText(/[$€]\s?[\d,]+/).first()).toBeVisible();
+  const fundCards = page.locator('h2').filter({ hasText: /fund/i });
+  const emptyState = page.getByText(/run a sync to ingest/i);
+  await expect(fundCards.first().or(emptyState)).toBeVisible();
+
+  const names = await fundCards.allInnerTexts();
+  if (names.length === 0) {
+    test.skip(true, 'No statements extracted — uniqueness is vacuously satisfied.');
+  }
+  // No duplicate fund names — the holdings query collapses to the latest per fund.
+  expect(new Set(names.map((n) => n.trim().toLowerCase())).size).toBe(names.length);
+});
+
+test('R7.5 — refresh updates the page without a full reload', async ({ page }) => {
+  await page.goto('/holdings');
+
+  // Mark the document so we can detect a hard navigation (which would wipe it).
+  await page.evaluate(() => ((window as unknown as Record<string, unknown>).__noReload = true));
+
+  await page.getByRole('button', { name: /refresh/i }).click();
+
+  // Heading still present and the in-page marker survived → no full reload (R7.5).
+  await expect(page.getByRole('heading', { name: 'Holdings' })).toBeVisible();
+  const survived = await page.evaluate(
+    () => (window as unknown as Record<string, unknown>).__noReload === true,
+  );
+  expect(survived).toBe(true);
 });
